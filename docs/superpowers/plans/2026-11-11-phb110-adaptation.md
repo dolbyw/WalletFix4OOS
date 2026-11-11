@@ -12,16 +12,16 @@
 
 ## Task 1: Build and verify local module
 
-- [ ] Write a test that builds from the extracted PHB110 ROM and checks component hashes, property, installer guard, and removal of OnePlus 12 ART files.
-- [ ] Run the test and observe its initial failure.
-- [ ] Implement the build script and PHB110 installer snippets.
-- [ ] Run the test and verify the generated ZIP and extracted APK outputs.
+- [x] Write a test that builds from the extracted PHB110 ROM and checks component hashes, property, installer guard, and removal of OnePlus 12 ART files.
+- [x] Run the test and observe its initial failure.
+- [x] Implement the build script and PHB110 installer snippets.
+- [x] Run the test and verify the generated ZIP and extracted APK outputs.
 
 ## Task 2: Document and publish
 
-- [ ] Document build inputs, installation gates, verification, and rollback.
-- [ ] Review the diff and run the build and test commands again.
-- [ ] Commit and push the PHB110 branch to `dolbyw/WalletFix4OOS`.
+- [x] Document build inputs, installation gates, verification, and rollback.
+- [x] Review the diff and run the build and test commands again.
+- [x] Commit and push the PHB110 branch to `dolbyw/WalletFix4OOS`.
 
 ## Review focus
 
