@@ -1,5 +1,20 @@
 ## WalletFix4OOS 更新日志
 
+### 2.3.0-PHB110.3 (1066)
+
+适配一加 11 CPH2449 / OxygenOS 16.0.5.702（PHB110 ColorOS 16.0.5.701 组件）。由 ChatGPT 与 DeepSeek 完成适配与真机排障。
+
+fix:
+- 模块 App「屡次停止运行」：模块挂载在 App 进程命名空间里被 `kernel_umount` 摘掉，APK ENOENT，绑定期 `GraphicsEnvironment.queryAngleChoice` NPE
+- 账号中心 `Resources$NotFoundException`：不再覆盖 `/product/priv-app/KeKeUserCenter`（CN 的 `com.heytap.vip` 壳会破坏 OEM `com.oneplus.account`）
+- 点「登录」后账号 App `ExceptionInInitializerError`：钱包按 `Build.BRAND` 拼 accountType，伪装 `BRAND/MANUFACTURER=OPPO` 后改走国行账号中心 `com.oplus.account`
+- 卡包「充值」一直转圈：随账号登录打通（`signup-info` 返回 SUC）
+
+changes:
+- `service.sh` 开机自动维护 `/data/adb/walletfix/spoof_vars`（补 `BRAND`/`MANUFACTURER`）与 Hybrid Mount `disable_umount`
+- 安装器不再要求 `spoof_vars` 内容完全一致，只要求含 `MODEL=PHB110`
+- `uninstall.sh` 正确还原 Hybrid Mount 配置
+
 ### 2.3.0
 
 feature:
