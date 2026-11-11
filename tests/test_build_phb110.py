@@ -50,6 +50,8 @@ class BuildPhb110Test(unittest.TestCase):
                 self.assertIn("MODEL=PHB110", installer)
                 self.assertIn("spoof_vars", installer)
                 self.assertIn("uninstall.sh", names)
+                self.assertNotIn("initrc/eid.rc", names)
+                self.assertFalse(any(n.startswith("system/odm/") for n in names))
                 self.assertIn("system/product/etc/permissions/privapp-permissions-walletfix-phb110.xml", names)
                 module = archive.read("module.prop").decode()
                 self.assertIn("id=walletfix4oos", module)
@@ -60,6 +62,46 @@ class BuildPhb110Test(unittest.TestCase):
                 "UPTsmService.apk": "6ADA3A9F3AC0E91B4D499DC60509B5E12DFC351076A12A17C0B158E0ECAD56C2",
             }.items():
                 self.assertEqual(hashlib.sha256((Path(tmp) / name).read_bytes()).hexdigest().upper(), digest)
+
+    def test_eid_variant_contains_phb110_hal_and_init_registration(self):
+        base = os.environ.get("PHB110_BASE_ZIP")
+        rom = os.environ.get("PHB110_ROM_ROOT")
+        if not base or not rom:
+            self.skipTest("Set PHB110_BASE_ZIP and PHB110_ROM_ROOT for ROM-backed integration test")
+
+        expected = {
+            "system/odm/bin/hw/vendor.oplus.hardware.eid@1.0-service": "D529DCFD38C526AC848A93673994C44CA9B6A5F7C29B8400FAD8F92351735A5F",
+            "system/odm/etc/vintf/manifest/manifest_oplus_eid.xml": "0AF56438D42D68F694CF502E5F4FB9F72F6EC4B320FBAEA4B495A192E3287DD3",
+            "system/odm/lib/vendor.oplus.hardware.eid-V1-ndk.so": "B0F2A2D8B6701DB897444A889C4EFDEA3822B2EA3A5F34C9B465ED2ED18B3997",
+            "system/odm/lib64/vendor.oplus.hardware.eid-V1-ndk.so": "5F4F4806AE4A2ABD89C2B4A419B183939523241EA12172A73BE255567FA459DD",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "build_phb110.py"),
+                 "--base-zip", base, "--rom-root", rom, "--output-dir", tmp, "--with-eid"],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            package = Path(tmp) / "WalletFix4OOS-PHB110-eID.zip"
+            with ZipFile(package) as archive:
+                names = set(archive.namelist())
+                for name, digest in expected.items():
+                    self.assertIn(name, names)
+                    self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest().upper(), digest)
+                self.assertNotIn("system/odm/etc/init/vendor.oplus.hardware.eid@1.0-service.rc", names)
+                init = archive.read("initrc/eid.rc").decode()
+                self.assertIn("service eid-1-0 /odm/bin/hw/vendor.oplus.hardware.eid@1.0-service", init)
+                self.assertIn("interface aidl vendor.oplus.hardware.eid.IEidDevice/default", init)
+                self.assertIn("on property:sys.boot_completed=1", init)
+                installer = archive.read("customize.sh").decode()
+                self.assertIn("initrc/eid.rc", installer)
+                self.assertIn("PHB110 eID requires KernelSU initrc injection", installer)
+                self.assertIn("hal_eid_oplus_exec", installer)
+                self.assertIn("vendor_configs_file", installer)
+                service = archive.read("service.sh").decode()
+                self.assertIn("ctl.start eid-1-0", service)
+                self.assertNotIn("MAX_RETRIES=10", service)
+                self.assertIn("PHB110 eID", archive.read("module.prop").decode())
 
 
 if __name__ == "__main__":
