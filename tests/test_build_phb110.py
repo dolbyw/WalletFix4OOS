@@ -15,6 +15,8 @@ EXPECTED_APKS = {
     "system/product/priv-app/OpenID/OpenID.apk": "5E79220E6E3838B5E1FBCA6C86CE0BB069321773A578D43D9CCEC9B57A1A9AC4",
     "system/product/app/TasWallet/TasWallet.apk": "E7CA8CA5542BC89A641C587C05EDE590B3FF98D9F89C0746054ED8DBC3C0C9E8",
     "system/product/app/KeKePay/KeKePay.apk": "047BA6537C8C41620C94845F4BCBC51D5952D5E5E3FC1384DF961D10EFC357D4",
+    "system/product/app/FinShellWallet/FinShellWallet.apk": "7E7D27FF6407D052219762F07822D313401DED53E907382A23CFC1364920BEA7",
+    "system/product/app/UPTsmService/UPTsmService.apk": "6ADA3A9F3AC0E91B4D499DC60509B5E12DFC351076A12A17C0B158E0ECAD56C2",
 }
 
 
@@ -52,16 +54,17 @@ class BuildPhb110Test(unittest.TestCase):
                 self.assertIn("uninstall.sh", names)
                 self.assertNotIn("initrc/eid.rc", names)
                 self.assertFalse(any(n.startswith(("system/odm/", "odm/")) for n in names))
+                self.assertIn("system/product/app/FinShellWallet/lib/arm64/libeidjni.so", names)
+                self.assertIn("system/product/app/UPTsmService/lib/arm64/libuptsmservice.so", names)
                 self.assertIn("system/product/etc/permissions/privapp-permissions-walletfix-phb110.xml", names)
                 module = archive.read("module.prop").decode()
                 self.assertIn("id=walletfix4oos", module)
+                self.assertIn("version=2.3.0-PHB110.2", module)
+                self.assertIn("versionCode=1065", module)
                 self.assertNotIn("updateJson=", module)
 
-            for name, digest in {
-                "FinShellWallet.apk": "7E7D27FF6407D052219762F07822D313401DED53E907382A23CFC1364920BEA7",
-                "UPTsmService.apk": "6ADA3A9F3AC0E91B4D499DC60509B5E12DFC351076A12A17C0B158E0ECAD56C2",
-            }.items():
-                self.assertEqual(hashlib.sha256((Path(tmp) / name).read_bytes()).hexdigest().upper(), digest)
+            self.assertFalse((Path(tmp) / "FinShellWallet.apk").exists())
+            self.assertFalse((Path(tmp) / "UPTsmService.apk").exists())
 
     def test_eid_variant_contains_phb110_hal_and_init_registration(self):
         base = os.environ.get("PHB110_BASE_ZIP")
@@ -103,6 +106,29 @@ class BuildPhb110Test(unittest.TestCase):
                 self.assertIn("ctl.start eid-1-0", service)
                 self.assertNotIn("MAX_RETRIES=10", service)
                 self.assertIn("PHB110 eID", archive.read("module.prop").decode())
+
+    def test_source_bundle_contains_required_apps_and_eid_files(self):
+        rom = os.environ.get("PHB110_ROM_ROOT")
+        if not rom:
+            self.skipTest("Set PHB110_ROM_ROOT for ROM-backed integration test")
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "PHB110-components.zip"
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "package_phb110_sources.py"),
+                 "--rom-root", rom, "--output", str(package)],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            with ZipFile(package) as archive:
+                names = set(archive.namelist())
+                self.assertIn("wallet/FinShellWallet/FinShellWallet.apk", names)
+                self.assertIn("wallet/FinShellWallet/lib/arm64/libeidjni.so", names)
+                self.assertIn("tsm/UPTsmService/UPTsmService.apk", names)
+                self.assertIn("eid_phb110/bin/hw/vendor.oplus.hardware.eid@1.0-service", names)
+                self.assertFalse(any(n.endswith((".vdex", ".odex", ".art")) for n in names))
+                for line in archive.read("SHA256SUMS.txt").decode().splitlines():
+                    digest, path = line.split("  ", 1)
+                    self.assertEqual(hashlib.sha256(archive.read(path)).hexdigest(), digest)
 
 
 if __name__ == "__main__":
