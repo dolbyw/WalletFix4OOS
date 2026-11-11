@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Build a private CPH2449 module from the official 2.3.0 ZIP and PHB110 ROM files."""
+"""Build a CPH2449 KernelSU module from the official 2.3.0 ZIP and PHB110 files."""
 
 import argparse
 import hashlib
 from pathlib import Path
-import shutil
 import sys
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -31,13 +30,11 @@ COMPONENTS = {
         "walletfix_phb_components/KeKePay/KeKePay.apk",
         "047BA6537C8C41620C94845F4BCBC51D5952D5E5E3FC1384DF961D10EFC357D4",
     ),
-}
-EXTRA_APKS = {
-    "FinShellWallet.apk": (
+    "system/product/app/FinShellWallet/FinShellWallet.apk": (
         "wallet/FinShellWallet/FinShellWallet.apk",
         "7E7D27FF6407D052219762F07822D313401DED53E907382A23CFC1364920BEA7",
     ),
-    "UPTsmService.apk": (
+    "system/product/app/UPTsmService/UPTsmService.apk": (
         "tsm/UPTsmService/UPTsmService.apk",
         "6ADA3A9F3AC0E91B4D499DC60509B5E12DFC351076A12A17C0B158E0ECAD56C2",
     ),
@@ -70,6 +67,8 @@ REPLACED_DIRS = (
     "system/product/priv-app/OpenID/",
     "system/product/app/TasWallet/",
     "system/product/app/KeKePay/",
+    "system/product/app/FinShellWallet/",
+    "system/product/app/UPTsmService/",
 )
 
 INSTALL_GUARD = '''if [ "$(getprop ro.product.model)" != "CPH2449" ] || [ "$(getprop ro.build.version.release)" != "16" ]; then
@@ -215,8 +214,6 @@ def component_files(rom_root: Path):
 
 def build(base_zip: Path, rom_root: Path, output_dir: Path, with_eid: bool = False) -> Path:
     require_hash(base_zip, BASE_SHA256)
-    for relative, expected in EXTRA_APKS.values():
-        require_hash(rom_root / relative, expected)
     files = list(component_files(rom_root))
     if with_eid:
         require_hash(rom_root / EID_ORIGINAL_RC[0], EID_ORIGINAL_RC[1])
@@ -236,14 +233,15 @@ def build(base_zip: Path, rom_root: Path, output_dir: Path, with_eid: bool = Fal
         module = replace_once(module, "name=Wallet Fix for OxygenOS",
                               "name=Wallet Fix for OxygenOS PHB110")
         module = replace_once(module, "version=2.3.0 (1064-8d00352-release)",
-                              "version=2.3.0-PHB110.1")
+                              "version=2.3.0-PHB110.2")
+        module = replace_once(module, "versionCode=1064", "versionCode=1065")
         module = replace_once(module, "description=Fix Oneplus Wallet for OxygenOS 14/15",
                               "description=CPH2449 OxygenOS 16 wallet adaptation from PHB110 ROM")
         if with_eid:
             module = replace_once(module, "name=Wallet Fix for OxygenOS PHB110",
                                   "name=Wallet Fix for OxygenOS PHB110 eID")
-            module = replace_once(module, "version=2.3.0-PHB110.1",
-                                  "version=2.3.0-PHB110.1-eID")
+            module = replace_once(module, "version=2.3.0-PHB110.2",
+                                  "version=2.3.0-PHB110.2-eID")
         changed = {
             "customize.sh": installer.encode(),
             "module.prop": module.encode(),
@@ -270,8 +268,6 @@ def build(base_zip: Path, rom_root: Path, output_dir: Path, with_eid: bool = Fal
             add_file(candidate, name, source.read_bytes())
 
     temporary.replace(output)
-    for name, (relative, _) in EXTRA_APKS.items():
-        shutil.copyfile(rom_root / relative, output_dir / name)
     return output
 
 
@@ -289,7 +285,7 @@ def main() -> int:
         print(f"Build failed: {error}", file=sys.stderr)
         return 1
     print(f"Built {result}")
-    print("The phone was not modified. Wallet and TSM APKs are separate output files.")
+    print("The phone was not modified. Wallet and TSM apps are included in the module ZIP.")
     return 0
 
 
