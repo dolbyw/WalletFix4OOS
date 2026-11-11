@@ -42,6 +42,28 @@ EXTRA_APKS = {
         "6ADA3A9F3AC0E91B4D499DC60509B5E12DFC351076A12A17C0B158E0ECAD56C2",
     ),
 }
+EID_FILES = {
+    "system/odm/bin/hw/vendor.oplus.hardware.eid@1.0-service": (
+        "eid_phb110/bin/hw/vendor.oplus.hardware.eid@1.0-service",
+        "D529DCFD38C526AC848A93673994C44CA9B6A5F7C29B8400FAD8F92351735A5F",
+    ),
+    "system/odm/etc/vintf/manifest/manifest_oplus_eid.xml": (
+        "eid_phb110/etc/vintf/manifest/manifest_oplus_eid.xml",
+        "0AF56438D42D68F694CF502E5F4FB9F72F6EC4B320FBAEA4B495A192E3287DD3",
+    ),
+    "system/odm/lib/vendor.oplus.hardware.eid-V1-ndk.so": (
+        "eid_phb110/lib/vendor.oplus.hardware.eid-V1-ndk.so",
+        "B0F2A2D8B6701DB897444A889C4EFDEA3822B2EA3A5F34C9B465ED2ED18B3997",
+    ),
+    "system/odm/lib64/vendor.oplus.hardware.eid-V1-ndk.so": (
+        "eid_phb110/lib64/vendor.oplus.hardware.eid-V1-ndk.so",
+        "5F4F4806AE4A2ABD89C2B4A419B183939523241EA12172A73BE255567FA459DD",
+    ),
+}
+EID_ORIGINAL_RC = (
+    "eid_phb110/etc/init/vendor.oplus.hardware.eid@1.0-service.rc",
+    "C3B116B2CF95B3F558CEDEE4B4FD03E3B8EF46F55823E8618AE2FC03F9AF2142",
+)
 REPLACED_DIRS = (
     "system/product/priv-app/KeKeUserCenter/",
     "system/product/priv-app/KeKeUserCenterAccount/",
@@ -86,6 +108,43 @@ PRIVAPP_PERMISSIONS = '''<?xml version="1.0" encoding="utf-8"?>
     </privapp-permissions>
 </permissions>
 '''
+EID_INITRC = '''# PHB110 eID service, registered by KernelSU before Android init parses services.
+service eid-1-0 /odm/bin/hw/vendor.oplus.hardware.eid@1.0-service
+    class hal
+    user system
+    group system
+    interface aidl vendor.oplus.hardware.eid.IEidDevice/default
+    disabled
+
+# KernelSU mounts system/odm after init parses rc; start only after that mount.
+on property:sys.boot_completed=1
+    start eid-1-0
+'''
+EID_SERVICE = '''MODDIR=${0%/*}
+LOG_FILE="$MODDIR/eid-service.log"
+
+# One fallback start after the overlay is mounted, if the init trigger missed it.
+while [ "$(getprop sys.boot_completed)" != "1" ]; do
+    sleep 2
+done
+state=$(getprop init.svc.eid-1-0)
+if [ "$state" != "running" ] && [ -n "$state" ]; then
+    setprop ctl.start eid-1-0
+    state=$(getprop init.svc.eid-1-0)
+fi
+printf 'eid-1-0 state: %s\n' "${state:-not registered}" > "$LOG_FILE"
+'''
+EID_INSTALL = '''ui_print "- Extracting PHB110 eID HAL and init registration"
+extract "$ZIPFILE" 'initrc/eid.rc' "$MODPATH"
+for file in $(unzip -l "$ZIPFILE" | awk '{print $4}' | grep '^system/odm/' | grep -v '/$' | grep -v '\\.sha256$'); do
+  extract "$ZIPFILE" "$file" "$MODPATH"
+done
+set_perm_recursive "$MODPATH/system/odm" 0 0 0755 0644 u:object_r:vendor_file:s0
+set_perm_recursive "$MODPATH/system/odm/bin" 0 0 0755 0755 u:object_r:vendor_file:s0
+set_perm "$MODPATH/system/odm/bin/hw/vendor.oplus.hardware.eid@1.0-service" 0 2000 0755 u:object_r:hal_eid_oplus_exec:s0
+set_perm_recursive "$MODPATH/system/odm/etc" 0 0 0755 0644 u:object_r:vendor_configs_file:s0
+
+'''
 
 
 def sha256(path: Path) -> str:
@@ -110,15 +169,20 @@ def replace_once(data: str, old: str, new: str) -> str:
     return data.replace(old, new, 1)
 
 
-def patched_installer(source: str) -> str:
+def patched_installer(source: str, with_eid: bool = False) -> str:
+    guard = INSTALL_GUARD
+    if with_eid:
+        guard += 'if [ -z "$KSU" ]; then\n  abort "! PHB110 eID requires KernelSU initrc injection"\nfi\n\n'
     source = replace_once(source, 'VERSION=$(grep_prop version "${TMPDIR}/module.prop")',
-                          INSTALL_GUARD + 'VERSION=$(grep_prop version "${TMPDIR}/module.prop")')
+                          guard + 'VERSION=$(grep_prop version "${TMPDIR}/module.prop")')
     source = replace_once(source, 'extract "$ZIPFILE" \'post-fs-data.sh\' "$MODPATH"',
                           'extract "$ZIPFILE" \'post-fs-data.sh\' "$MODPATH"\n'
                           'extract "$ZIPFILE" \'system.prop\' "$MODPATH"\n'
                           'extract "$ZIPFILE" \'uninstall.sh\' "$MODPATH"')
     source = replace_once(source, 'mv "$TMPDIR/sepolicy.rule" "$MODPATH"',
                           'mv "$TMPDIR/sepolicy.rule" "$MODPATH"\n\n' + CONFIG_SETUP)
+    if with_eid:
+        source = replace_once(source, 'HAS32BIT=false &&', EID_INSTALL + 'HAS32BIT=false &&')
     return source
 
 
@@ -149,18 +213,24 @@ def component_files(rom_root: Path):
             yield f"{target_dir}/{source.relative_to(source_dir).as_posix()}", source
 
 
-def build(base_zip: Path, rom_root: Path, output_dir: Path) -> Path:
+def build(base_zip: Path, rom_root: Path, output_dir: Path, with_eid: bool = False) -> Path:
     require_hash(base_zip, BASE_SHA256)
     for relative, expected in EXTRA_APKS.values():
         require_hash(rom_root / relative, expected)
     files = list(component_files(rom_root))
+    if with_eid:
+        require_hash(rom_root / EID_ORIGINAL_RC[0], EID_ORIGINAL_RC[1])
+        for target, (relative, expected) in EID_FILES.items():
+            source = rom_root / relative
+            require_hash(source, expected)
+            files.append((target, source))
     output_dir.mkdir(parents=True, exist_ok=True)
-    output = output_dir / "WalletFix4OOS-PHB110.zip"
+    output = output_dir / ("WalletFix4OOS-PHB110-eID.zip" if with_eid else "WalletFix4OOS-PHB110.zip")
     temporary = output.with_suffix(".zip.tmp")
 
     with ZipFile(base_zip) as upstream, ZipFile(temporary, "w") as candidate:
         old_installer = upstream.read("customize.sh").decode()
-        installer = patched_installer(old_installer)
+        installer = patched_installer(old_installer, with_eid)
         module = upstream.read("module.prop").decode()
         module = "\n".join(line for line in module.splitlines() if not line.startswith("updateJson=")) + "\n"
         module = replace_once(module, "name=Wallet Fix for OxygenOS",
@@ -169,10 +239,17 @@ def build(base_zip: Path, rom_root: Path, output_dir: Path) -> Path:
                               "version=2.3.0-PHB110.1")
         module = replace_once(module, "description=Fix Oneplus Wallet for OxygenOS 14/15",
                               "description=CPH2449 OxygenOS 16 wallet adaptation from PHB110 ROM")
+        if with_eid:
+            module = replace_once(module, "name=Wallet Fix for OxygenOS PHB110",
+                                  "name=Wallet Fix for OxygenOS PHB110 eID")
+            module = replace_once(module, "version=2.3.0-PHB110.1",
+                                  "version=2.3.0-PHB110.1-eID")
         changed = {
             "customize.sh": installer.encode(),
             "module.prop": module.encode(),
         }
+        if with_eid:
+            changed["service.sh"] = EID_SERVICE.encode()
         for item in upstream.infolist():
             name = item.filename
             if any(name.startswith(prefix) for prefix in REPLACED_DIRS):
@@ -184,6 +261,8 @@ def build(base_zip: Path, rom_root: Path, output_dir: Path) -> Path:
             add_file(candidate, name, data, executable=name.endswith(".sh"))
         add_file(candidate, "system.prop", b"ro.product.cuptsm=ONEPLUS|ESE|01|02\n")
         add_file(candidate, "uninstall.sh", UNINSTALL.encode(), executable=True)
+        if with_eid:
+            add_file(candidate, "initrc/eid.rc", EID_INITRC.encode())
         add_file(candidate,
                  "system/product/etc/permissions/privapp-permissions-walletfix-phb110.xml",
                  PRIVAPP_PERMISSIONS.encode())
@@ -201,9 +280,11 @@ def main() -> int:
     parser.add_argument("--base-zip", required=True, type=Path)
     parser.add_argument("--rom-root", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--with-eid", action="store_true",
+                        help="include the PHB110 eID HAL and KernelSU init registration")
     args = parser.parse_args()
     try:
-        result = build(args.base_zip, args.rom_root, args.output_dir)
+        result = build(args.base_zip, args.rom_root, args.output_dir, args.with_eid)
     except (ValueError, OSError, KeyError) as error:
         print(f"Build failed: {error}", file=sys.stderr)
         return 1
