@@ -1,42 +1,57 @@
-# Wallet Fix for OxygenOS
+# Wallet Fix for OnePlus 11 (CPH2449)
 
-一加 11 CPH2449 / PHB110 的本地适配方案见 [docs/PHB110.md](docs/PHB110.md)。
+适配目标：一加 11 CPH2449、OxygenOS 16.0.5.702(EX01)、KernelSU + Zygisk Next + Hybrid Mount。国行组件取自同机型 PHB110 ColorOS 16.0.5.701(CN01) 全量 ROM。
 
-使OxygenOS的**一加12**可以使用Oppo钱包，若使用其他设备，请在安装完成后创建`/data/adb/walletfix/spoof_vars`文件，文件内容为`MODEL=你的设备型号`
+**状态：本地构建与 ZIP 校验已完成；尚未在手机上验证账号登录、工牌、交通卡。eID 未适配。**
 
-目前仅对钱包应用和银联可信服务安全组件伪装机型，如有需要，可创建`/data/adb/walletfix/target.txt`文件，内容为需要伪装的应用包名列表，每行一个包名，至少需包函`com.finshell.wallet`和`com.unionpay.tsmservice`
+## 模块内容
 
-若不知道对应国行版本的设备型号，可以从 [这里](https://github.com/KHwang9883/MobileModels/blob/master/brands/oneplus.md) 查找
+- 用 PHB110 的账号中心、OpenID、TasWallet、KeKePay 替换上游一加 12 组件。覆盖海外 `KeKeUserCenter` 目录来切换账号服务。
+- 沿用上游 Zygisk 库，仅在钱包和银联 TSM 进程内设 `Build.MODEL=PHB110`；已有不同内容的 `/data/adb/walletfix/spoof_vars` 会使安装中止。
+- 通过 KernelSU `system.prop` 设置国行 ROM 原值 `ro.product.cuptsm=ONEPLUS|ESE|01|02`，加入账号组件所需的 product privapp 权限。仅允许在 CPH2449 / Android 16 安装。
+- 不修改 `/vendor`、`/odm` 或 NFC 路由文件。停用模块并重启可撤销账号覆盖与属性。
 
-例如一加12国行型号位`PJD110`，则文件内容为`MODEL=PJD110`
+本仓库不上传国行 APK。构建脚本校验上游 2.3.0 release ZIP 和 PHB110 ROM APK 的 SHA-256，输出模块 ZIP 及单独安装的钱包、银联 TSM APK。上游项目：[geniucker-dev/WalletFix4OOS](https://github.com/geniucker-dev/WalletFix4OOS)。
 
-已在一加12的OxygenOS 14和OxygenOS15测试
+## 本地构建和测试
 
-## 说明
+工作空间中已有 ROM 提取结果；在本仓库根目录运行：
 
-本模块使用从 一加12 ColorOS 的全量OTA包中提取的 账号中心 和 OpenID 替换系统中的对应应用，然后对钱包应用伪装为国行系统
+```powershell
+$python='C:\Users\husk1\AppData\Roaming\uv\python\cpython-3.12.16-windows-x86_64-none\python.exe'
+$base='D:\Projects\movewallet\tools\Wallet-Fix-for-OxygenOS-2.3.0-1064-8d00352-release.zip'
+$rom='D:\Projects\movewallet\rom-extracted'
+& $python scripts\build_phb110.py --base-zip $base --rom-root $rom --output-dir 'D:\Projects\movewallet\WalletFix4OOS\dist'
+$env:PHB110_BASE_ZIP=$base
+$env:PHB110_ROM_ROOT=$rom
+& $python -m unittest discover -s tests -v
+```
 
-## 注意
+输出：`dist/WalletFix4OOS-PHB110.zip`、`dist/FinShellWallet.apk`、`dist/UPTsmService.apk`。`dist/` 不会提交到 Git。
 
-本模块会替换 账号应用 为国行版本，**介意请勿安装**
+## 真机测试与回滚
 
-## 使用方法
+**以下命令会改动手机，目前未执行。** 模块会切换账号组件，实际使用前应备份重要账号与卡片数据。指定序列号避免操作另一台 ADB 设备。
 
-1. 安装Oppo钱包
-2. 安装银联可信服务安全组件（如果不需要支付功能可以跳过）
-3. 确保已安装 Magisk/KernelSU/Apatch，并已启用 zygisk
-4. 安装本模块
-5. 若设备不是一加12，参考上文最开头部分
+```powershell
+$adb='D:\Green\platform-tools\adb.exe'
+& $adb -s 2d842a6c install -r 'D:\Projects\movewallet\WalletFix4OOS\dist\FinShellWallet.apk'
+& $adb -s 2d842a6c install -r 'D:\Projects\movewallet\WalletFix4OOS\dist\UPTsmService.apk'
+& $adb -s 2d842a6c push 'D:\Projects\movewallet\WalletFix4OOS\dist\WalletFix4OOS-PHB110.zip' /data/local/tmp/WalletFix4OOS-PHB110.zip
+& $adb -s 2d842a6c shell su -c '/data/adb/ksud module install /data/local/tmp/WalletFix4OOS-PHB110.zip'
+& $adb -s 2d842a6c reboot
+```
 
-## 已知问题
+重启后核对 `getprop ro.product.cuptsm`、`pm list packages com.oplus.account` 和 `pm list packages com.finshell.wallet`，再实际验证登录、录卡、Google 钱包与银行 App。若有问题，先禁用模块并重启；钱包及 TSM 用户 App 会保留，避免直接删除卡片数据。
 
-1. eid 不工作 (已找到原因及解决方法，见https://github.com/geniucker-dev/WalletFix4OOS/issues/13)
+```powershell
+& $adb -s 2d842a6c shell su -c '/data/adb/ksud module disable walletfix4oos'
+& $adb -s 2d842a6c reboot
+```
 
-## License
+## 未解决
 
-[GPL-3.0](LICENSE)
+- eID：未加入 PHB110 eID HAL，也未做真机验证。
+- 国行账号、eSE 和工牌录入仍可能受服务端或卡片类型限制，需真机日志确认。
 
-## Acknowledgements
-
-- [PlayIntegrityFix](https://github.com/chiteroman/PlayIntegrityFix)
-- [TrickyStore](https://github.com/5ec1cff/TrickyStore/tree/master)
+许可证：[GPL-3.0](LICENSE)。
