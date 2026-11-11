@@ -9,7 +9,7 @@
 - 用 PHB110 的账号中心、OpenID、TasWallet、KeKePay 替换上游一加 12 组件。覆盖海外 `KeKeUserCenter` 目录来切换账号服务。
 - 沿用上游 Zygisk 库，仅在钱包和银联 TSM 进程内设 `Build.MODEL=PHB110`；已有不同内容的 `/data/adb/walletfix/spoof_vars` 会使安装中止。
 - 通过 KernelSU `system.prop` 设置国行 ROM 原值 `ro.product.cuptsm=ONEPLUS|ESE|01|02`，加入账号组件所需的 product privapp 权限。仅允许在 CPH2449 / Android 16 安装。
-- 可选 eID 版本额外覆盖 PHB110 的 `/odm` eID 可执行文件、两份接口库和 VINTF 声明，并通过 KernelSU `initrc` 在启动早期注册服务、开机完成后启动。OOS 已有的 `com.oplus.eid` 服务 APK 的代码和清单与 PHB110 相同，无须替换。SELinux eID 域和主要依赖库在 OOS 中也已存在。
+- 可选 eID 版本额外从模块顶层 `odm/` 覆盖 PHB110 的 `/odm` eID 可执行文件、两份接口库和 VINTF 声明，并通过 KernelSU `initrc` 在启动早期注册服务、开机完成后启动。这台 OOS 没有 `/system/odm` 链接，因此 Hybrid Mount 需要模块顶层 `odm/`。OOS 已有的 `com.oplus.eid` 服务 APK 的代码和清单与 PHB110 相同，无须替换。SELinux eID 域和主要依赖库在 OOS 中也已存在。
 - 不直接写入 `/vendor`、`/odm` 或更改 NFC 路由文件。停用模块并重启可撤销账号、属性及可选 eID 覆盖。
 
 本仓库不上传国行 APK。构建脚本校验上游 2.3.0 release ZIP 和 PHB110 ROM APK 的 SHA-256，输出模块 ZIP 及单独安装的钱包、银联 TSM APK。上游项目：[geniucker-dev/WalletFix4OOS](https://github.com/geniucker-dev/WalletFix4OOS)。
