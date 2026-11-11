@@ -7,4 +7,6 @@
 /captures
 .externalNativeBuild
 .cxx
+__pycache__/
+dist/
 local.properties

@@ -1,5 +1,7 @@
 # Wallet Fix for OxygenOS
 
+一加 11 CPH2449 / PHB110 的本地适配方案见 [docs/PHB110.md](docs/PHB110.md)。
+
 使OxygenOS的**一加12**可以使用Oppo钱包，若使用其他设备，请在安装完成后创建`/data/adb/walletfix/spoof_vars`文件，文件内容为`MODEL=你的设备型号`
 
 目前仅对钱包应用和银联可信服务安全组件伪装机型，如有需要，可创建`/data/adb/walletfix/target.txt`文件，内容为需要伪装的应用包名列表，每行一个包名，至少需包函`com.finshell.wallet`和`com.unionpay.tsmservice`
