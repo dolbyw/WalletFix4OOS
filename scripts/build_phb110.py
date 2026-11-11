@@ -43,19 +43,19 @@ EXTRA_APKS = {
     ),
 }
 EID_FILES = {
-    "system/odm/bin/hw/vendor.oplus.hardware.eid@1.0-service": (
+    "odm/bin/hw/vendor.oplus.hardware.eid@1.0-service": (
         "eid_phb110/bin/hw/vendor.oplus.hardware.eid@1.0-service",
         "D529DCFD38C526AC848A93673994C44CA9B6A5F7C29B8400FAD8F92351735A5F",
     ),
-    "system/odm/etc/vintf/manifest/manifest_oplus_eid.xml": (
+    "odm/etc/vintf/manifest/manifest_oplus_eid.xml": (
         "eid_phb110/etc/vintf/manifest/manifest_oplus_eid.xml",
         "0AF56438D42D68F694CF502E5F4FB9F72F6EC4B320FBAEA4B495A192E3287DD3",
     ),
-    "system/odm/lib/vendor.oplus.hardware.eid-V1-ndk.so": (
+    "odm/lib/vendor.oplus.hardware.eid-V1-ndk.so": (
         "eid_phb110/lib/vendor.oplus.hardware.eid-V1-ndk.so",
         "B0F2A2D8B6701DB897444A889C4EFDEA3822B2EA3A5F34C9B465ED2ED18B3997",
     ),
-    "system/odm/lib64/vendor.oplus.hardware.eid-V1-ndk.so": (
+    "odm/lib64/vendor.oplus.hardware.eid-V1-ndk.so": (
         "eid_phb110/lib64/vendor.oplus.hardware.eid-V1-ndk.so",
         "5F4F4806AE4A2ABD89C2B4A419B183939523241EA12172A73BE255567FA459DD",
     ),
@@ -116,7 +116,7 @@ service eid-1-0 /odm/bin/hw/vendor.oplus.hardware.eid@1.0-service
     interface aidl vendor.oplus.hardware.eid.IEidDevice/default
     disabled
 
-# KernelSU mounts system/odm after init parses rc; start only after that mount.
+# Hybrid Mount mounts odm after init parses rc; start only after that mount.
 on property:sys.boot_completed=1
     start eid-1-0
 '''
@@ -136,13 +136,13 @@ printf 'eid-1-0 state: %s\n' "${state:-not registered}" > "$LOG_FILE"
 '''
 EID_INSTALL = '''ui_print "- Extracting PHB110 eID HAL and init registration"
 extract "$ZIPFILE" 'initrc/eid.rc' "$MODPATH"
-for file in $(unzip -l "$ZIPFILE" | awk '{print $4}' | grep '^system/odm/' | grep -v '/$' | grep -v '\\.sha256$'); do
+for file in $(unzip -l "$ZIPFILE" | awk '{print $4}' | grep '^odm/' | grep -v '/$' | grep -v '\\.sha256$'); do
   extract "$ZIPFILE" "$file" "$MODPATH"
 done
-set_perm_recursive "$MODPATH/system/odm" 0 0 0755 0644 u:object_r:vendor_file:s0
-set_perm_recursive "$MODPATH/system/odm/bin" 0 0 0755 0755 u:object_r:vendor_file:s0
-set_perm "$MODPATH/system/odm/bin/hw/vendor.oplus.hardware.eid@1.0-service" 0 2000 0755 u:object_r:hal_eid_oplus_exec:s0
-set_perm_recursive "$MODPATH/system/odm/etc" 0 0 0755 0644 u:object_r:vendor_configs_file:s0
+set_perm_recursive "$MODPATH/odm" 0 0 0755 0644 u:object_r:vendor_file:s0
+set_perm_recursive "$MODPATH/odm/bin" 0 0 0755 0755 u:object_r:vendor_file:s0
+set_perm "$MODPATH/odm/bin/hw/vendor.oplus.hardware.eid@1.0-service" 0 2000 0755 u:object_r:hal_eid_oplus_exec:s0
+set_perm_recursive "$MODPATH/odm/etc" 0 0 0755 0644 u:object_r:vendor_configs_file:s0
 
 '''
 
